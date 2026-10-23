@@ -71,6 +71,17 @@ jobs:
           cache: true
       - name: runtime version
         run: ${{ matrix.runtime }} --version
+      # podman's Compose shim drives an external provider over podman's API
+      # socket, which is not listening by default on the runner. Start it so the
+      # Compose test exercises podman instead of skipping; if this fails, the
+      # test skips on its own rather than failing the job.
+      - name: start podman API service
+        if: matrix.runtime == 'podman'
+        continue-on-error: true
+        run: |
+          podman system service --time=0 unix:///tmp/podman.sock &
+          for _ in $(seq 1 20); do [ -S /tmp/podman.sock ] && break; sleep 0.5; done
+          echo "DOCKER_HOST=unix:///tmp/podman.sock" >> "$GITHUB_ENV"
       - name: lifecycle against ${{ matrix.runtime }}
         run: make test-integration
 

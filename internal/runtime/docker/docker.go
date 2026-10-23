@@ -19,7 +19,7 @@ func (*Adapter) Name() string        { return "docker" }
 func (*Adapter) Binary() string      { return "docker" }
 func (*Adapter) Aliases() []string   { return nil }
 func (*Adapter) Platforms() []string { return nil }
-func (*Adapter) Description() string { return "Docker CLI (Docker Engine / Docker Desktop)" }
+func (*Adapter) Description() string { return "Docker Engine / Docker Desktop" }
 
 func (*Adapter) ParseVersion(raw string) string { return runtime.ExtractVersion(raw) }
 

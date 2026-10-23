@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"os/exec"
 	"sort"
 	"strings"
 	"text/tabwriter"
@@ -43,21 +44,22 @@ func newRuntimeListCmd(a *app) *cobra.Command {
 			}
 
 			w := tabwriter.NewWriter(a.out, 0, 0, 2, ' ', 0)
-			fmt.Fprintln(w, "\tNAME\tSTATUS\tVERSION\tBINARY\tDESCRIPTION")
+			fmt.Fprintln(w, "\tNAME\tSTATUS\tVERSION\tCOMPOSE\tDESCRIPTION")
 			for _, f := range found {
 				marker := " "
 				if f.Adapter.Name() == selected {
 					marker = "*"
 				}
-				status, version, binary := "available", f.Version, f.Path
+				status, version := "available", f.Version
 				if !f.Available {
-					status, version, binary = f.Reason, "-", "-"
+					status, version = f.Reason, "-"
 				}
 				if version == "" {
 					version = "unknown"
 				}
 				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n",
-					marker, f.Adapter.Name(), status, version, binary, f.Adapter.Description())
+					marker, f.Adapter.Name(), status, version,
+					composeProvider(f.Adapter), f.Adapter.Description())
 			}
 			if err := w.Flush(); err != nil {
 				return err
@@ -65,8 +67,49 @@ func newRuntimeListCmd(a *app) *cobra.Command {
 			if selected != "" {
 				fmt.Fprintf(a.out, "\n* selected for this machine (override with --runtime or ANYCTR_RUNTIME)\n")
 			}
+			a.advertiseComposeProvider(found, selected)
 			return nil
 		},
+	}
+}
+
+// composeProvider names where a runtime's Compose comes from, and whether an
+// external provider is actually installed.
+func composeProvider(adapter runtime.Adapter) string {
+	ext, ok := adapter.(runtime.ExternalComposer)
+	if !ok {
+		return adapter.Name() + " compose"
+	}
+	if _, err := exec.LookPath(ext.ComposeBinary()); err != nil {
+		return ext.ComposeBinary() + " (not installed)"
+	}
+	return ext.ComposeBinary()
+}
+
+// advertiseComposeProvider points at the missing provider for the runtime this
+// machine will actually use — the one moment where the suggestion is useful
+// rather than noise.
+func (a *app) advertiseComposeProvider(found []detect.Found, selected string) {
+	for _, f := range found {
+		if f.Adapter.Name() != selected {
+			continue
+		}
+		ext, ok := f.Adapter.(runtime.ExternalComposer)
+		if !ok {
+			return
+		}
+		if _, err := exec.LookPath(ext.ComposeBinary()); err == nil {
+			return
+		}
+		fmt.Fprintf(a.out, "\n%s has no Compose of its own. For `anyctr compose`, install %s:\n",
+			f.Adapter.Name(), ext.ComposeBinary())
+		if install := ext.ComposeInstall(); len(install) > 0 {
+			fmt.Fprintf(a.out, "    %s\n", strings.Join(install, " "))
+		}
+		if src := ext.ComposeSource(); src != "" {
+			fmt.Fprintf(a.out, "    %s\n", src)
+		}
+		return
 	}
 }
 

@@ -81,4 +81,11 @@ if ! command -v docker >/dev/null 2>&1 && \
 else
   say ""
   "$PREFIX/$BIN" runtime list || true
+
+  # Apple's container has no Compose of its own; anyctr routes to this provider.
+  if command -v container >/dev/null 2>&1 && ! command -v container-compose >/dev/null 2>&1; then
+    say ""
+    say "For \`anyctr compose\` on Apple container, install the provider:"
+    say "  brew install pedrospdc/tap/container-compose"
+  fi
 fi

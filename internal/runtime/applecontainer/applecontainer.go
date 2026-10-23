@@ -28,7 +28,7 @@ func (*Adapter) Name() string        { return "container" }
 func (*Adapter) Binary() string      { return "container" }
 func (*Adapter) Aliases() []string   { return nil }
 func (*Adapter) Platforms() []string { return []string{"darwin"} }
-func (*Adapter) Description() string { return "Apple container (one lightweight VM per container)" }
+func (*Adapter) Description() string { return "Apple silicon, one VM per container" }
 
 func (*Adapter) ParseVersion(raw string) string { return runtime.ExtractVersion(raw) }
 
@@ -42,6 +42,19 @@ func (*Adapter) Label(version string) string {
 // ComposeProvider is the external Compose implementation anyctr routes to for
 // Apple's container, which has none of its own.
 const ComposeProvider = "container-compose"
+
+// ComposeBinary, ComposeInstall and ComposeSource implement
+// runtime.ExternalComposer, so the CLI can report the provider in
+// `anyctr runtime list` and offer to install it when Compose is first used.
+func (*Adapter) ComposeBinary() string { return ComposeProvider }
+
+func (*Adapter) ComposeInstall() []string {
+	return []string{"brew", "install", "pedrospdc/tap/" + ComposeProvider}
+}
+
+func (*Adapter) ComposeSource() string {
+	return "https://github.com/pedrospdc/apple-container-compose"
+}
 
 // vmPerContainer is the reason behind most of the gaps below, so it is written
 // once.

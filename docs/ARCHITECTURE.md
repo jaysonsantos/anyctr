@@ -171,10 +171,14 @@ forwarding would make the strictness guarantee meaningless.
 
 **Compose is routed, not interpreted.** Each adapter names its provider —
 `docker compose`, `podman compose`, or `container-compose` for Apple's container,
-which ships none — and `internal/cli/compose.go` checks that the provider is
-actually there before running it, because a missing provider produces a far worse
-error than anyctr's own. Arguments are forwarded verbatim, so compose files stay
-the provider's business.
+which ships none. An adapter whose Compose lives in a separate binary implements
+`runtime.ExternalComposer`, which is how the CLI knows the provider's name, how to
+install it, and where it comes from. `internal/cli/compose.go` checks it is
+actually on PATH before running anything, because a missing provider produces a
+far worse error than anyctr's own, and offers to install it when there is a
+terminal to ask on. Without one, it explains and exits: a prompt nobody can answer
+is worse than a clear failure. Arguments are forwarded verbatim, so compose files
+stay the provider's business.
 
 **No daemon probing.** Availability means "the CLI exists and reports a version".
 Checking whether an engine is *running* is slow, racy, and the runtime's own error

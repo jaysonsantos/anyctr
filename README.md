@@ -163,13 +163,23 @@ arguments verbatim — anyctr does not parse compose files:
 | podman | `podman compose` (which drives a provider of its own) |
 | container | [`container-compose`](https://github.com/pedrospdc/apple-container-compose) |
 
-Apple's `container` ships no Compose, so anyctr routes to `container-compose`
-when it is installed, and says exactly that — with the install command — when it
-is not:
+Apple's `container` ships no Compose, so anyctr routes to `container-compose`.
+`anyctr runtime list` shows the provider for every runtime and flags a missing
+one, and `anyctr compose` offers to install it on the spot:
 
 ```console
-brew install pedrospdc/tap/container-compose
+$ anyctr compose up -d
+runtime "container" ships no Compose implementation
+
+  anyctr routes `compose` to container-compose, which is not installed:
+    brew install pedrospdc/tap/container-compose
+    https://github.com/pedrospdc/apple-container-compose
+
+Install it now with `brew install pedrospdc/tap/container-compose`? [y/N]
 ```
+
+Answering no — or running without a terminal, as in CI — prints the same
+explanation and exits, rather than blocking on a prompt nobody will answer.
 
 ## Configuration
 

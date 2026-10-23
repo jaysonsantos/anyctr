@@ -328,3 +328,16 @@ func Terminal(op spec.Op) (tty, stdin bool) {
 // Command reports the anyctr command being translated, for messages that need to
 // suggest a corrected invocation.
 func (t *Tr) Command() string { return t.command }
+
+// ExternalComposer is implemented by adapters whose Compose support comes from a
+// separate binary rather than the runtime's own CLI. Apple's container ships no
+// Compose at all, so anyctr routes to a provider — and has to be able to say
+// which one, whether it is installed, and how to install it.
+type ExternalComposer interface {
+	// ComposeBinary names the provider executable.
+	ComposeBinary() string
+	// ComposeInstall is the command that installs it, or nil when unknown.
+	ComposeInstall() []string
+	// ComposeSource is where the provider comes from, for the curious.
+	ComposeSource() string
+}

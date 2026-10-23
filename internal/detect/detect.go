@@ -13,6 +13,7 @@
 package detect
 
 import (
+	"context"
 	"os/exec"
 	goruntime "runtime"
 	"strings"
@@ -221,21 +222,20 @@ func supportsPlatform(a runtime.Adapter) bool {
 	return false
 }
 
+// probeVersion asks a CLI for its version, bounded in time because some of them
+// are slow to start (a VM manager may spin up state first).
+//
+// The timeout is enforced with a context rather than a racing goroutine: a
+// goroutine left behind after the timeout keeps touching process state — the
+// environment among it — long after the probe returned, which is both a leak and
+// a data race with anything that writes to the environment afterwards.
 func probeVersion(path string, a runtime.Adapter) string {
-	cmd := exec.Command(path, "--version")
-	// Some CLIs are slow to start (a VM manager may spin up state); bound it.
-	done := make(chan []byte, 1)
-	go func() {
-		out, _ := cmd.CombinedOutput()
-		done <- out
-	}()
-	select {
-	case out := <-done:
-		return a.ParseVersion(strings.TrimSpace(string(out)))
-	case <-time.After(versionTimeout):
-		if cmd.Process != nil {
-			_ = cmd.Process.Kill()
-		}
+	ctx, cancel := context.WithTimeout(context.Background(), versionTimeout)
+	defer cancel()
+
+	out, err := exec.CommandContext(ctx, path, "--version").CombinedOutput()
+	if err != nil && len(out) == 0 {
 		return ""
 	}
+	return a.ParseVersion(strings.TrimSpace(string(out)))
 }

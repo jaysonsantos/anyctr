@@ -5,6 +5,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/pedrospdc/anyctr/internal/runtime"
+	"github.com/pedrospdc/anyctr/internal/runtime/applecontainer"
 )
 
 // explain runs anyctr in --explain mode and returns the translated command line.
@@ -291,6 +294,48 @@ func TestComposeRouting(t *testing.T) {
 	}
 	if want := "container-compose up -d"; got != want {
 		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+// TestComposeProviderIsAdvertised checks that `anyctr runtime list` says where
+// each runtime's Compose comes from. A runtime with no Compose of its own is the
+// thing engineers most need to be told about before they hit it.
+func TestComposeProviderIsAdvertised(t *testing.T) {
+	t.Setenv("ANYCTR_CONFIG", filepath.Join(t.TempDir(), "config.toml"))
+	var out, errBuf bytes.Buffer
+	a := &app{out: &out, err: &errBuf}
+	root := newRootCmd("test", a)
+	root.SetArgs([]string{"runtime", "list"})
+	root.SetOut(&out)
+	root.SetErr(&errBuf)
+	if err := root.Execute(); err != nil {
+		t.Fatalf("runtime list failed: %v", err)
+	}
+	for _, want := range []string{"COMPOSE", "docker compose", "podman compose", "container-compose"} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("runtime list should mention %q:\n%s", want, out.String())
+		}
+	}
+}
+
+// TestComposeMissingMessage pins what an engineer is told when the provider for
+// their runtime is not installed: which binary, how to get it, and the way out
+// if they would rather not.
+func TestComposeMissingMessage(t *testing.T) {
+	ext, ok := any(applecontainer.New()).(runtime.ExternalComposer)
+	if !ok {
+		t.Fatal("Apple's container adapter should declare an external Compose provider")
+	}
+	msg := composeMissingMessage("container", ext, []string{"up", "-d"})
+	for _, want := range []string{
+		"container-compose",
+		"brew install pedrospdc/tap/container-compose",
+		"https://github.com/pedrospdc/apple-container-compose",
+		"anyctr --runtime=docker compose up",
+	} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("message should contain %q:\n%s", want, msg)
+		}
 	}
 }
 

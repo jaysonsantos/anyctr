@@ -23,7 +23,7 @@ func (*Adapter) Name() string        { return "podman" }
 func (*Adapter) Binary() string      { return "podman" }
 func (*Adapter) Aliases() []string   { return nil }
 func (*Adapter) Platforms() []string { return nil }
-func (*Adapter) Description() string { return "Podman CLI (daemonless, rootless by default)" }
+func (*Adapter) Description() string { return "Daemonless, rootless by default" }
 
 func (*Adapter) ParseVersion(raw string) string { return runtime.ExtractVersion(raw) }
 

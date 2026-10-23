@@ -283,12 +283,14 @@ func TestComposeRouting(t *testing.T) {
 		t.Errorf("got %q, want %q", got, want)
 	}
 
-	_, _, err = explain(t, "--runtime=container", "compose", "up")
-	if err == nil {
-		t.Fatal("Apple's container has no compose; expected a refusal")
+	// Apple's container has no Compose of its own, so anyctr routes to an
+	// external provider rather than refusing outright.
+	got, _, err = explain(t, "--runtime=container", "compose", "up", "-d")
+	if err != nil {
+		t.Fatalf("Apple compose should route to a provider: %v", err)
 	}
-	if !strings.Contains(err.Error(), "no Compose implementation") {
-		t.Errorf("unexpected error: %v", err)
+	if want := "container-compose up -d"; got != want {
+		t.Errorf("got %q, want %q", got, want)
 	}
 }
 

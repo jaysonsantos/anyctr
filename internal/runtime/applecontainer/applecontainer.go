@@ -39,6 +39,10 @@ func (*Adapter) Label(version string) string {
 	return "apple/container " + version
 }
 
+// ComposeProvider is the external Compose implementation anyctr routes to for
+// Apple's container, which has none of its own.
+const ComposeProvider = "container-compose"
+
 // vmPerContainer is the reason behind most of the gaps below, so it is written
 // once.
 const vmPerContainer = "Apple's container runs each container in its own lightweight VM, " +
@@ -207,16 +211,15 @@ func (a *Adapter) Translate(op spec.Op, tr *runtime.Tr) (runtime.Invocation, err
 	case *spec.Tag:
 		b.Add("image", "tag", s.Source, s.Target)
 	case *spec.Compose:
-		return runtime.Invocation{}, &runtime.ErrUnsupportedOp{
-			Op:      "compose",
-			Runtime: a.Name(),
-			Reason:  "Apple's container ships no Compose implementation.",
-			Alternatives: []string{
-				"Nearest option: run the services with `anyctr run` on a shared network,",
-				"or select a runtime that has Compose:",
-				"    anyctr --runtime=docker compose up",
-			},
-		}
+		// Apple ships no Compose of its own, so anyctr routes to the external
+		// provider the same way podman's shim does. Availability is checked by
+		// the caller, not here, so --explain still works without it installed.
+		return runtime.Invocation{
+			Bin:   ComposeProvider,
+			Args:  s.Args,
+			TTY:   true,
+			Stdin: true,
+		}, nil
 	default:
 		return runtime.Invocation{}, &runtime.ErrUnsupportedOp{Op: op.Command(), Runtime: a.Name()}
 	}

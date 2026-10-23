@@ -169,6 +169,13 @@ recognises them explicitly while they lead the argument list.
 about a flag it does not model, so it errors and points at `anyctr raw`. Silently
 forwarding would make the strictness guarantee meaningless.
 
+**Compose is routed, not interpreted.** Each adapter names its provider —
+`docker compose`, `podman compose`, or `container-compose` for Apple's container,
+which ships none — and `internal/cli/compose.go` checks that the provider is
+actually there before running it, because a missing provider produces a far worse
+error than anyctr's own. Arguments are forwarded verbatim, so compose files stay
+the provider's business.
+
 **No daemon probing.** Availability means "the CLI exists and reports a version".
 Checking whether an engine is *running* is slow, racy, and the runtime's own error
 messages are better than anything anyctr could synthesise.

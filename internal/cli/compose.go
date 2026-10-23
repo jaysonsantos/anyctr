@@ -50,6 +50,18 @@ func (a *app) compose(args []string) error {
 		return err
 	}
 
+	// Apple's container has no Compose; anyctr routes to an external provider,
+	// which has to actually be installed before we run it.
+	if info.Name == "container" && !a.explain {
+		if _, lookErr := exec.LookPath(inv.Bin); lookErr != nil {
+			return fmt.Errorf("Apple's container ships no Compose implementation\n\n"+
+				"  anyctr routes `compose` to %s, which is not installed:\n"+
+				"    brew install pedrospdc/tap/%s\n\n"+
+				"  Or select a runtime that has Compose built in:\n"+
+				"    anyctr --runtime=docker compose %s", inv.Bin, inv.Bin, args[0])
+		}
+	}
+
 	// Compose v2 is a CLI plugin, and plenty of machines still only have the
 	// standalone binary. Fall back to it rather than failing on a technicality.
 	if info.Name == "docker" && !a.explain && !hasComposePlugin(info.Binary) {

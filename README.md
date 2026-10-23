@@ -107,7 +107,7 @@ way to check portability before you commit a script.
 | `rm` | `rm` | `delete` |
 | `rmi` | `rmi` | `image delete` |
 | `tag` | `tag` | `image tag` |
-| `compose` | `docker compose` / `podman compose` | *unsupported* |
+| `compose` | `docker compose` / `podman compose` | `container-compose` |
 
 Flag-by-flag support is in [docs/CAPABILITIES.md](docs/CAPABILITIES.md), generated
 from the code. For a live view of just the flags that need attention:
@@ -154,13 +154,22 @@ eyes open.
 
 ## Compose
 
-`anyctr compose` routes to whichever Compose the runtime provides: the
-`docker compose` plugin, a standalone `docker-compose` binary, or `podman compose`.
-Arguments are forwarded verbatim — anyctr does not parse compose files.
+`anyctr compose` routes to whichever Compose the runtime provides, forwarding
+arguments verbatim — anyctr does not parse compose files:
 
-Apple's `container` has no Compose, and anyctr reports that plainly rather than
-half-working. A built-in Compose engine that drives any runtime is the next
-significant feature (see Roadmap).
+| runtime | provider |
+| --- | --- |
+| docker | the `docker compose` plugin, falling back to a standalone `docker-compose` |
+| podman | `podman compose` (which drives a provider of its own) |
+| container | [`container-compose`](https://github.com/pedrospdc/apple-container-compose) |
+
+Apple's `container` ships no Compose, so anyctr routes to `container-compose`
+when it is installed, and says exactly that — with the install command — when it
+is not:
+
+```console
+brew install pedrospdc/tap/container-compose
+```
 
 ## Configuration
 
@@ -200,7 +209,7 @@ is a bug.
 ## Roadmap
 
 - `containerd`/`nerdctl` adapter
-- A built-in Compose engine, so `compose up` works on runtimes without one
+- A built-in Compose engine, so `compose up` needs no external provider
 - `inspect`, `cp`, `network`, `volume` commands
 - Shell completions and a `docker`-named symlink mode for drop-in use
 

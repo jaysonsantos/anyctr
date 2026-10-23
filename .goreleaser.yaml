@@ -1,0 +1,41 @@
+# Release configuration for anyctr.
+#   git tag v0.1.0 && git push --tags   →   goreleaser release --clean
+version: 2
+
+before:
+  hooks:
+    - go mod tidy
+    - go test ./...
+
+builds:
+  - id: anyctr
+    main: ./cmd/anyctr
+    binary: anyctr
+    env: [CGO_ENABLED=0]
+    ldflags:
+      - -s -w -X main.version={{.Version}}
+    goos: [darwin, linux, windows]
+    goarch: [amd64, arm64]
+
+archives:
+  - formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files: [README.md, LICENSE, docs/*]
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  sort: asc
+  filters:
+    exclude: ['^docs:', '^test:', '^chore:']
+
+brews:
+  - name: anyctr
+    description: One CLI for any container runtime
+    homepage: https://github.com/pedrospdc/anyctr
+    repository:
+      owner: pedrospdc
+      name: homebrew-tap

@@ -1,0 +1,114 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    # anyctr is a cross-platform CLI, so it is tested on every OS it claims to
+    # support. The translation tests run everywhere because --explain never
+    # executes a runtime.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache: true
+      - run: go vet ./...
+      - run: go test -race ./...
+      - run: go build ./cmd/anyctr
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache: true
+      - name: gofmt
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "these files need gofmt:"; echo "$unformatted"; exit 1
+          fi
+      - name: capability matrix is current
+        run: make docs-check
+
+  cross:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache: true
+      - run: make cross
+
+  # Tier 1: run anyctr's output on real runtimes. ubuntu-latest ships Docker,
+  # Docker Compose and Podman preinstalled, so this needs no setup step.
+  integration:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        runtime: [docker, podman]
+    env:
+      ANYCTR_RUNTIME: ${{ matrix.runtime }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache: true
+      - name: runtime version
+        run: ${{ matrix.runtime }} --version
+      - name: lifecycle against ${{ matrix.runtime }}
+        run: make test-integration
+
+  # Tier 2: check the capability matrix against each runtime's real --help
+  # surface. This catches drift in both directions — a flag we refuse that the
+  # runtime has gained, and a flag we claim that it no longer accepts.
+  conformance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache: true
+      - run: make verify-caps
+
+  # Apple's container cannot run on GitHub-hosted macOS runners: they are M1 VMs,
+  # and nested virtualization is unavailable, which the runner-images maintainers
+  # confirmed in actions/runner-images#13565. Conformance only reads --help and
+  # starts no VM, so it may work anyway — run it manually to find out, and do not
+  # block CI on the answer until it has proven stable.
+  conformance-apple:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: macos-26
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache: true
+      - name: install apple/container
+        run: |
+          url=$(gh release view --repo apple/container --json assets \
+            --jq '.assets[] | select(.name | endswith(".pkg")) | .url' | head -1)
+          curl -fsSL -o container.pkg "$url"
+          sudo installer -pkg container.pkg -target /
+          container --version
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - run: make verify-caps

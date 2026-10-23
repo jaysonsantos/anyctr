@@ -30,3 +30,10 @@ go.work.sum
 # Editor/IDE
 # .idea/
 # .vscode/
+
+# Build output
+bin/
+dist/
+
+# Claude Code local settings
+.claude/settings.local.json

@@ -45,17 +45,25 @@ anyctr: error: --restart is not supported by runtime "container" (apple/containe
 ## Install
 
 ```console
-go install github.com/pedrospdc/anyctr/cmd/anyctr@latest   # requires Go 1.25+
+brew install pedrospdc/tap/anyctr
 ```
 
-or from a clone:
+or, on macOS and Linux:
 
 ```console
+curl -fsSL https://raw.githubusercontent.com/pedrospdc/anyctr/main/install.sh | sh
+```
+
+or with Go, or from a clone:
+
+```console
+go install github.com/pedrospdc/anyctr/cmd/anyctr@latest   # requires Go 1.25+
 make install
 ```
 
-Prebuilt binaries for darwin/linux/windows on amd64 and arm64 are attached to each
-release.
+Prebuilt binaries for darwin, linux and windows on amd64 and arm64 are attached to
+[each release](https://github.com/pedrospdc/anyctr/releases), with checksums. On
+Windows, download the `.zip` and put `anyctr.exe` on your PATH.
 
 ## Getting started
 
@@ -227,6 +235,27 @@ runners — they are M1 VMs without nested virtualization, which
 — so its integration tier needs a self-hosted Apple-silicon runner or a developer
 Mac. Its conformance tier may work on hosted runners since it starts no VM; the
 `conformance-apple` job is wired up behind `workflow_dispatch` to find out.
+
+### Releasing
+
+Push a tag and the rest is automatic:
+
+```console
+git tag v0.1.0 && git push origin v0.1.0
+```
+
+GoReleaser builds all six targets, publishes a GitHub release with checksums, and
+updates the Homebrew cask in `pedrospdc/homebrew-tap`. The cask step needs a
+`HOMEBREW_TAP_DEPLOY_KEY` secret on this repo — an SSH deploy key with write
+access to the tap. Without it the release still publishes; only the tap update
+fails.
+
+`goreleaser check` runs in CI, so a broken release config fails on the pull
+request that breaks it rather than on the tag. To rehearse a release locally:
+
+```console
+go run github.com/goreleaser/goreleaser/v2@latest release --snapshot --clean --skip=publish
+```
 
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) covers the design and how to add a
 runtime or a command.

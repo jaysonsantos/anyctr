@@ -1,6 +1,7 @@
-# Release configuration for anyctr.
-#   git tag v0.1.0 && git push --tags   →   goreleaser release --clean
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
 version: 2
+
+project_name: anyctr
 
 before:
   hooks:
@@ -11,31 +12,94 @@ builds:
   - id: anyctr
     main: ./cmd/anyctr
     binary: anyctr
-    env: [CGO_ENABLED=0]
-    ldflags:
-      - -s -w -X main.version={{.Version}}
+    env:
+      - CGO_ENABLED=0
+    # anyctr is a gateway, not a runtime: it runs wherever an engineer works,
+    # even when the runtime it drives is remote or platform-specific.
     goos: [darwin, linux, windows]
     goarch: [amd64, arm64]
+    flags: [-trimpath]
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+    mod_timestamp: "{{ .CommitTimestamp }}"
 
 archives:
-  - formats: [tar.gz]
+  - id: default
+    formats: [tar.gz]
     format_overrides:
       - goos: windows
         formats: [zip]
-    files: [README.md, LICENSE, docs/*]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - LICENSE
+      - README.md
+      - docs/*
 
 checksum:
   name_template: checksums.txt
 
 changelog:
   sort: asc
+  use: github
   filters:
-    exclude: ['^docs:', '^test:', '^chore:']
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^ci:"
+      - "^chore:"
 
-brews:
+release:
+  github:
+    owner: pedrospdc
+    name: anyctr
+  footer: |
+    **Install**
+
+    ```sh
+    brew install pedrospdc/tap/anyctr
+    # or
+    curl -fsSL https://raw.githubusercontent.com/pedrospdc/anyctr/main/install.sh | sh
+    # or
+    go install github.com/pedrospdc/anyctr/cmd/anyctr@{{ .Tag }}
+    ```
+
+    Then check what anyctr found on your machine:
+
+    ```sh
+    anyctr runtime list
+    ```
+
+homebrew_casks:
   - name: anyctr
-    description: One CLI for any container runtime
-    homepage: https://github.com/pedrospdc/anyctr
     repository:
       owner: pedrospdc
       name: homebrew-tap
+      branch: main
+      git:
+        url: "git@github.com:pedrospdc/homebrew-tap.git"
+        private_key: "{{ .Env.HOMEBREW_TAP_DEPLOY_KEY }}"
+    commit_author:
+      name: goreleaserbot
+      email: bot@goreleaser.com
+    commit_msg_template: "anyctr {{ .Tag }}"
+    directory: Casks
+    homepage: https://github.com/pedrospdc/anyctr
+    description: One CLI for any container runtime
+    # No runtime dependency on purpose: anyctr drives whichever runtime you
+    # already have, and refuses to guess when none is installed.
+    caveats: |
+      anyctr drives a container runtime you install separately — Docker,
+      Podman, or Apple's container. See what it finds on this machine:
+
+        anyctr runtime list
+
+      Apple's container needs its services started once per boot:
+
+        container system start
+    hooks:
+      post:
+        # The binary isn't notarized; drop the quarantine flag Homebrew sets.
+        install_steps: |
+          on_macos do
+            run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{ .StagedPath }}/anyctr"]
+          end

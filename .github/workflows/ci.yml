@@ -42,6 +42,11 @@ jobs:
           fi
       - name: capability matrix is current
         run: make docs-check
+      # Catch a broken release config on the PR that breaks it, not on the tag.
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          version: "~> v2"
+          args: check
 
   cross:
     runs-on: ubuntu-latest

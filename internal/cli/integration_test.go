@@ -194,8 +194,11 @@ func TestStrictRefusalOnRealRuntime(t *testing.T) {
 
 // TestComposeRoutes only runs where Compose exists.
 func TestComposeRoutes(t *testing.T) {
-	if out, code := tryAnyctr(t, "--explain", "compose", "version"); code != 0 {
-		t.Skipf("no Compose on this runtime:\n%s", out)
+	// The probe has to run Compose, not translate it: --explain executes nothing,
+	// so it would "succeed" on a runtime whose Compose provider is missing or
+	// cannot reach its socket.
+	if out, code := tryAnyctr(t, "compose", "version"); code != 0 {
+		t.Skipf("no working Compose on this runtime:\n%s", out)
 	}
 	dir := t.TempDir()
 	compose := "services:\n  hello:\n    image: " + testImage + "\n    command: [\"echo\", \"compose-via-anyctr\"]\n"

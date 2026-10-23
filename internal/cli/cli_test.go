@@ -32,17 +32,6 @@ func explain(t *testing.T, args ...string) (command, warnings string, err error)
 	return command, errBuf.String(), err
 }
 
-// normalizeBinary reduces the resolved binary path to its name, so expectations
-// hold whether or not the runtime happens to be installed on the test machine.
-func normalizeBinary(command string) string {
-	bin, rest, found := strings.Cut(command, " ")
-	bin = filepath.Base(bin)
-	if !found {
-		return bin
-	}
-	return bin + " " + rest
-}
-
 func TestTranslatesRunAcrossRuntimes(t *testing.T) {
 	args := []string{"run", "-d", "-it", "--rm", "-p", "8080:80", "-e", "FOO=bar",
 		"--name", "web", "-v", "/src:/app", "-w", "/app", "nginx:alpine", "sh", "-c", "echo hi"}
@@ -105,6 +94,52 @@ func TestCommandNameMapping(t *testing.T) {
 			}
 			if got != tc.want {
 				t.Errorf("translated command\n  got:  %s\n  want: %s", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestFlagSpellingPerRuntime pins the flags that a Docker-family runtime spells
+// differently. Docker renamed `stop --time` to --timeout; podman kept --time, and
+// so did Apple. Getting this wrong produces a command the runtime rejects, which
+// is exactly the failure a gateway must not ship.
+func TestFlagSpellingPerRuntime(t *testing.T) {
+	cases := map[string]string{
+		"docker":    "docker stop --timeout=3 web",
+		"podman":    "podman stop --time=3 web",
+		"container": "container stop --time 3 web",
+	}
+	for rt, want := range cases {
+		t.Run(rt, func(t *testing.T) {
+			got, _, err := explain(t, "--runtime="+rt, "stop", "-t", "3", "web")
+			if err != nil {
+				t.Fatalf("translation failed: %v", err)
+			}
+			if got != want {
+				t.Errorf("got  %s\nwant %s", got, want)
+			}
+		})
+	}
+}
+
+// TestPodmanGapsAreRefused covers the flags podman genuinely lacks, which the
+// conformance tests found by reading podman's own help.
+func TestPodmanGapsAreRefused(t *testing.T) {
+	cases := [][]string{
+		{"run", "--gpus=all", "nginx"},
+		{"build", "--progress=plain", "."},
+		{"push", "--all-tags", "me/app"},
+		{"logs", "--details", "web"},
+		{"stop", "--signal=TERM", "web"},
+	}
+	for _, args := range cases {
+		t.Run(args[1], func(t *testing.T) {
+			_, _, err := explain(t, append([]string{"--runtime=podman"}, args...)...)
+			if err == nil {
+				t.Fatalf("podman has no %s; it must be refused", args[1])
+			}
+			if !isUnsupported(err) {
+				t.Fatalf("expected an unsupported-flag error, got %T: %v", err, err)
 			}
 		})
 	}

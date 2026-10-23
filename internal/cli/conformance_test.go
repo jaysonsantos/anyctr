@@ -189,8 +189,8 @@ func translate(t *testing.T, f detect.Found, command string, extra []string) ([]
 	}
 	for _, line := range strings.Split(out.String(), "\n") {
 		if strings.HasPrefix(line, "command: ") {
-			fields := strings.Fields(strings.TrimPrefix(line, "command: "))
-			return fields[1:], true // drop the binary
+			_, args := splitBinary(strings.TrimPrefix(line, "command: "))
+			return strings.Fields(args), true
 		}
 	}
 	t.Errorf("no translated command in output:\n%s", out.String())

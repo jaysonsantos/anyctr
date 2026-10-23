@@ -15,6 +15,11 @@ type Builder struct {
 	// are separate tokens, which is what Swift ArgumentParser CLIs expect.
 	Joined bool
 
+	// Renames overrides the token emitted for a canonical flag, for runtimes in
+	// an otherwise Docker-compatible family that spell one differently — Docker
+	// renamed `docker stop --time` to `--timeout`, while podman kept `--time`.
+	Renames map[string]string
+
 	args []string
 }
 
@@ -29,9 +34,17 @@ func (b *Builder) Add(vals ...string) { b.args = append(b.args, vals...) }
 // Args returns the accumulated argv.
 func (b *Builder) Args() []string { return b.args }
 
-// Bool emits --canonical when on.
+// token is the flag spelling this runtime uses for a canonical flag.
+func (b *Builder) token(canonical string) string {
+	if t, ok := b.Renames[canonical]; ok {
+		return t
+	}
+	return "--" + canonical
+}
+
+// Bool emits the runtime's spelling of the flag when on.
 func (b *Builder) Bool(canonical string, on bool) {
-	b.BoolAs(canonical, "--"+canonical, on)
+	b.BoolAs(canonical, b.token(canonical), on)
 }
 
 // BoolAs emits the given token when on.
@@ -43,7 +56,7 @@ func (b *Builder) BoolAs(canonical, emit string, on bool) {
 
 // Str emits --canonical=value (or `--canonical value`) when value is set.
 func (b *Builder) Str(canonical, value string) {
-	b.StrAs(canonical, "--"+canonical, value)
+	b.StrAs(canonical, b.token(canonical), value)
 }
 
 // StrAs emits the given token with value when value is set.
@@ -56,7 +69,7 @@ func (b *Builder) StrAs(canonical, emit, value string) {
 
 // Rep emits the flag once per value.
 func (b *Builder) Rep(canonical string, values []string) {
-	b.RepAs(canonical, "--"+canonical, values)
+	b.RepAs(canonical, b.token(canonical), values)
 }
 
 // RepAs emits the given token once per value.

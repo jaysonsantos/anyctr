@@ -40,6 +40,10 @@ func noAll(cmd string) runtime.Support {
 	)
 }
 
+// renames covers the flags Docker spells differently from the canonical name.
+// `docker stop --time` was renamed to --timeout and no longer appears in help.
+var renames = map[string]string{"time": "--timeout"}
+
 func (*Adapter) Caps() runtime.Caps {
 	return runtime.Caps{
 		"stop.all": noAll("stop"),
@@ -58,7 +62,7 @@ func (a *Adapter) Translate(op spec.Op, tr *runtime.Tr) (runtime.Invocation, err
 			Stdin: true,
 		}, nil
 	}
-	args, err := dockerlike.Translate(op, tr)
+	args, err := dockerlike.Translate(op, tr, renames)
 	if err != nil {
 		return runtime.Invocation{}, err
 	}

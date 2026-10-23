@@ -13,9 +13,12 @@ import (
 	"github.com/pedrospdc/anyctr/internal/spec"
 )
 
-// Translate renders a Docker-convention argv for the given operation.
-func Translate(op spec.Op, tr *runtime.Tr) ([]string, error) {
+// Translate renders a Docker-convention argv for the given operation. renames
+// carries the few flags a family member spells differently; nil for an exact
+// Docker dialect.
+func Translate(op spec.Op, tr *runtime.Tr, renames map[string]string) ([]string, error) {
 	b := runtime.NewBuilder(tr, true)
+	b.Renames = renames
 	switch s := op.(type) {
 	case *spec.Run:
 		run(b, s)

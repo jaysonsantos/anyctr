@@ -36,9 +36,38 @@ func (*Adapter) Label(version string) string {
 
 func (*Adapter) Caps() runtime.Caps {
 	return runtime.Caps{
-		"run.gpus": runtime.Div(
-			"Podman routes GPUs through CDI; this needs a configured CDI spec " +
-				"(e.g. nvidia-ctk cdi generate) rather than a container runtime hook."),
+		// Verified against `podman --help` on 5.8.4 by the conformance tests.
+		"run.gpus": runtime.No(
+			"Podman has no --gpus; it exposes GPUs through the Container Device Interface.",
+			"Nearest option: generate a CDI spec (nvidia-ctk cdi generate) and pass",
+			"the device explicitly:",
+			"    anyctr --runtime=podman run --device=nvidia.com/gpu=all ...",
+		),
+		"build.progress": runtime.No(
+			"`podman build` has no --progress; build output is printed directly.",
+			"Nearest option: drop the flag, or use --quiet to suppress output.",
+		),
+		"push.all-tags": runtime.No(
+			"`podman push` pushes a single reference.",
+			"Nearest option: push each tag explicitly.",
+		),
+		"push.platform": runtime.No(
+			"`podman push` has no --platform; it pushes the image as built.",
+			"Nearest option: select the platform at build time with",
+			"    anyctr build --platform=... ",
+		),
+		"logs.details": runtime.No(
+			"`podman logs` has no --details.",
+			"Nearest option: --timestamps, or inspect the container for its labels.",
+		),
+		"stop.signal": runtime.No(
+			"`podman stop` always sends the container's stop signal.",
+			"Nearest option: send a signal explicitly with",
+			"    anyctr raw kill --signal=<sig> <container>",
+		),
+		"rm.link": runtime.No(
+			"Podman does not implement legacy container links.",
+		),
 		"run.userns": runtime.Div(
 			"Podman's user namespace values differ from Docker's (keep-id, nomap, " +
 				"auto), and rootless Podman already runs in a user namespace."),
@@ -64,7 +93,7 @@ func (a *Adapter) Translate(op spec.Op, tr *runtime.Tr) (runtime.Invocation, err
 			Stdin: stdin,
 		}, nil
 	}
-	args, err := dockerlike.Translate(op, tr)
+	args, err := dockerlike.Translate(op, tr, nil)
 	if err != nil {
 		return runtime.Invocation{}, err
 	}

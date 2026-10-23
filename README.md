@@ -181,6 +181,32 @@ Install it now with `brew install pedrospdc/tap/container-compose`? [y/N]
 Answering no — or running without a terminal, as in CI — prints the same
 explanation and exits, rather than blocking on a prompt nobody will answer.
 
+## Using it as `docker`
+
+Scripts, Makefiles and CI configs call `docker`. On a machine that runs Apple's
+container or Podman instead, `anyctr alias` gives them one:
+
+```console
+$ anyctr alias
+No docker command found. Create one that runs anyctr (for Makefiles and scripts)? [Y/n] y
+Created /opt/homebrew/bin/docker -> /opt/homebrew/bin/anyctr
+
+`docker` now runs anyctr. Undo it with `anyctr alias --remove`.
+```
+
+```console
+$ docker run --rm alpine echo hi      # on a machine with no Docker
+hi
+```
+
+It installs a symlink, not a shell alias, because `make` and anything else that
+shells out runs `/bin/sh`, which never sees the aliases in your `.zshrc` — and
+the hand-typed case is the one that needs the least help.
+
+anyctr will not shadow a real Docker: if `docker` already exists it says so and
+leaves it alone, unless you pass `--force`. `anyctr runtime list` offers the
+alias when it is missing, and `anyctr alias --remove` undoes it.
+
 ## Configuration
 
 Optional. `~/.config/anyctr/config.toml` (`%APPDATA%\anyctr\config.toml` on

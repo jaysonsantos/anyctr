@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"bufio"
 	"fmt"
 	"os"
 	"os/exec"
@@ -100,9 +99,10 @@ func (a *app) ensureComposeProvider(adapter runtime.Adapter, args []string) erro
 		}
 	}
 
-	if installable && interactive() {
+	if installable && hasTerminal() {
 		fmt.Fprintf(a.err, "%s\n\n", composeMissingMessage(adapter.Name(), ext, args))
-		if a.confirm(fmt.Sprintf("Install it now with `%s`?", strings.Join(install, " "))) {
+		ok, promptErr := confirm(a.err, fmt.Sprintf("Install it now with `%s`?", strings.Join(install, " ")), false)
+		if promptErr == nil && ok {
 			fmt.Fprintln(a.err)
 			if err := runInstaller(install); err != nil {
 				return fmt.Errorf("installing %s failed: %w\n\n  Install it manually:\n    %s",
@@ -141,31 +141,6 @@ func composeMissingMessage(runtimeName string, ext runtime.ExternalComposer, arg
 	return b.String()
 }
 
-// confirm asks a yes/no question on stderr, so it cannot pollute piped stdout.
-func (a *app) confirm(question string) bool {
-	fmt.Fprintf(a.err, "%s [y/N] ", question)
-	answer, err := bufio.NewReader(os.Stdin).ReadString('\n')
-	if err != nil {
-		return false
-	}
-	switch strings.ToLower(strings.TrimSpace(answer)) {
-	case "y", "yes":
-		return true
-	}
-	return false
-}
-
-// interactive reports whether there is a terminal to ask questions on. Without
-// one — in CI, in a pipeline — anyctr must fail with instructions instead of
-// blocking forever on a prompt nobody will answer.
-func interactive() bool {
-	info, err := os.Stdin.Stat()
-	if err != nil {
-		return false
-	}
-	return info.Mode()&os.ModeCharDevice != 0
-}
-
 func runInstaller(argv []string) error {
 	cmd := exec.Command(argv[0], argv[1:]...)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stderr, os.Stderr
@@ -178,4 +153,14 @@ func runInstaller(argv []string) error {
 func hasComposePlugin(dockerBin string) bool {
 	cmd := exec.Command(dockerBin, "compose", "version")
 	return cmd.Run() == nil
+}
+
+// hasTerminal reports whether there is a terminal to ask questions on, including
+// the controlling terminal when stdin is a pipe.
+func hasTerminal() bool {
+	in, closer, err := promptInput()
+	if closer != nil {
+		closer.Close()
+	}
+	return err == nil && in != nil
 }

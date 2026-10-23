@@ -180,6 +180,15 @@ terminal to ask on. Without one, it explains and exits: a prompt nobody can answ
 is worse than a clear failure. Arguments are forwarded verbatim, so compose files
 stay the provider's business.
 
+**The alias must never become a loop.** `anyctr alias` installs a `docker` that
+is anyctr itself, and detection prefers `docker` — so the first version of this
+selected its own alias as the runtime and forked until the process table filled.
+Two guards now: `detect.IsSelf` refuses to treat a runtime binary that resolves to
+the running anyctr as a runtime (and `runtime list` says why), and `procexec`
+marks every child it starts so an anyctr that is somehow still executed as a
+runtime fails immediately with instructions. Detection is the fix; the marker is
+the backstop, because a fork bomb is a far worse failure than an error.
+
 **No daemon probing.** Availability means "the CLI exists and reports a version".
 Checking whether an engine is *running* is slow, racy, and the runtime's own error
 messages are better than anything anyctr could synthesise.

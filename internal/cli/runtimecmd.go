@@ -68,6 +68,7 @@ func newRuntimeListCmd(a *app) *cobra.Command {
 				fmt.Fprintf(a.out, "\n* selected for this machine (override with --runtime or ANYCTR_RUNTIME)\n")
 			}
 			a.advertiseComposeProvider(found, selected)
+			a.suggestAlias(found)
 			return nil
 		},
 	}

@@ -96,6 +96,11 @@ homebrew_casks:
       Apple's container needs its services started once per boot:
 
         container system start
+
+      anyctr speaks Docker's CLI convention. To let Makefiles and scripts that
+      call `docker` use it on a machine without Docker:
+
+        anyctr alias
     hooks:
       post:
         # The binary isn't notarized; drop the quarantine flag Homebrew sets.

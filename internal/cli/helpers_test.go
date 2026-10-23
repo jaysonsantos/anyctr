@@ -3,6 +3,7 @@ package cli
 import (
 	"os"
 	"path/filepath"
+	goruntime "runtime"
 	"strings"
 )
 
@@ -36,3 +37,6 @@ func normalizeBinary(command string) string {
 func writeFile(path, content string) error {
 	return os.WriteFile(path, []byte(content), 0o600)
 }
+
+// runtimeGOOS is wrapped so tests read without a runtime import alias.
+func runtimeGOOS() string { return goruntime.GOOS }

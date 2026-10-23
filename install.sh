@@ -6,6 +6,7 @@
 # Environment:
 #   VERSION=v1.2.3   install a specific release (default: latest)
 #   PREFIX=/dir      install directory (default: /usr/local/bin if writable, else ~/.local/bin)
+#   ALIAS=yes|no     create a `docker` command that runs anyctr (default: ask when docker is missing)
 set -eu
 
 REPO="pedrospdc/anyctr"
@@ -89,3 +90,12 @@ else
     say "  brew install pedrospdc/tap/container-compose"
   fi
 fi
+
+# anyctr speaks Docker's convention, so a machine without Docker can still have a
+# `docker` command. Offered, never assumed: it is skipped outright when a real
+# Docker is installed.
+case "${ALIAS:-ask}" in
+  yes) PATH="$PREFIX:$PATH" "$PREFIX/$BIN" alias --yes ;;
+  no) ;;
+  *) PATH="$PREFIX:$PATH" "$PREFIX/$BIN" alias || true ;;
+esac

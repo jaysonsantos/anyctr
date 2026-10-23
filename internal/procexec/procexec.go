@@ -14,6 +14,11 @@ import (
 	"github.com/pedrospdc/anyctr/internal/runtime"
 )
 
+// LoopGuardEnv marks a process anyctr started. Seeing it in our own environment
+// means anyctr was run as its own runtime — the `docker` on PATH is the alias
+// anyctr installed — which would otherwise recurse forever.
+const LoopGuardEnv = "ANYCTR_EXEC_CHILD"
+
 // ExitCodeError carries a child process exit status.
 type ExitCodeError struct {
 	Code int
@@ -56,6 +61,9 @@ func Run(inv runtime.Invocation) (int, error) {
 	}
 
 	cmd := exec.Command(bin, inv.Args...)
+	// Mark the child so an anyctr that ends up being executed as a runtime can
+	// recognise the loop instead of forking until the process table fills.
+	cmd.Env = append(os.Environ(), LoopGuardEnv+"=1")
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

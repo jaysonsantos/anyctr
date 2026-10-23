@@ -2,10 +2,12 @@ package cli
 
 import (
 	"bytes"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/pedrospdc/anyctr/internal/procexec"
 	"github.com/pedrospdc/anyctr/internal/runtime"
 	"github.com/pedrospdc/anyctr/internal/runtime/applecontainer"
 )
@@ -382,6 +384,125 @@ func TestCapabilityMatrixCoversEveryFlag(t *testing.T) {
 	for _, key := range []string{"run.restart", "run.publish", "ps.format", "build.tag", "logs.tail"} {
 		if !seen[key] {
 			t.Errorf("capability matrix is missing %s", key)
+		}
+	}
+}
+
+// TestProgramName covers how anyctr reports itself when installed under the
+// alias: an engineer who typed `docker` should not read help about `anyctr`.
+func TestProgramName(t *testing.T) {
+	cases := map[string]string{
+		"/usr/local/bin/anyctr":    "anyctr",
+		"/opt/homebrew/bin/docker": "docker",
+		`C:\tools\docker.exe`:      "docker",
+		`C:\tools\docker.cmd`:      "docker",
+		"anyctr":                   "anyctr",
+		"":                         "anyctr",
+	}
+	for argv0, want := range cases {
+		if got := programName(argv0); got != want {
+			t.Errorf("programName(%q) = %q, want %q", argv0, got, want)
+		}
+	}
+}
+
+// TestAliasLifecycle covers creating, recognising and removing the alias.
+func TestAliasLifecycle(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("PATH", dir)
+	t.Setenv("ANYCTR_CONFIG", filepath.Join(t.TempDir(), "config.toml"))
+
+	run := func(args ...string) string {
+		t.Helper()
+		var out, errBuf bytes.Buffer
+		a := &app{out: &out, err: &errBuf}
+		root := newRootCmd("test", a)
+		root.SetArgs(args)
+		root.SetOut(&out)
+		root.SetErr(&errBuf)
+		if err := root.Execute(); err != nil {
+			t.Fatalf("anyctr %v failed: %v", args, err)
+		}
+		return out.String()
+	}
+
+	if out := run("alias", "--remove"); !strings.Contains(out, "No docker alias") {
+		t.Errorf("removing a missing alias should say so, got:\n%s", out)
+	}
+
+	out := run("alias", "--yes", "--dir", dir)
+	if !strings.Contains(out, "Created") {
+		t.Fatalf("expected the alias to be created, got:\n%s", out)
+	}
+	if _, err := os.Stat(filepath.Join(dir, aliasFileName())); err != nil {
+		t.Fatalf("alias file missing: %v", err)
+	}
+
+	// Now that it is on PATH, anyctr must recognise the alias as its own rather
+	// than treating it as somebody else's docker.
+	if out := run("alias", "--dir", dir); !strings.Contains(out, "already runs anyctr") {
+		t.Errorf("expected recognition of our own alias, got:\n%s", out)
+	}
+	if out := run("alias", "--remove"); !strings.Contains(out, "Removed") {
+		t.Errorf("expected removal, got:\n%s", out)
+	}
+	if _, err := os.Stat(filepath.Join(dir, aliasFileName())); !os.IsNotExist(err) {
+		t.Errorf("alias file should be gone, stat error was %v", err)
+	}
+}
+
+// TestAliasLeavesRealDockerAlone is the safety property: aliasing must never
+// silently reroute a machine that already has Docker.
+func TestAliasLeavesRealDockerAlone(t *testing.T) {
+	if runtimeGOOS() == "windows" {
+		t.Skip("creating an executable on PATH differs on Windows")
+	}
+	dir := t.TempDir()
+	realDocker := filepath.Join(dir, "docker")
+	if err := os.WriteFile(realDocker, []byte("#!/bin/sh\necho real docker\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir)
+	t.Setenv("ANYCTR_CONFIG", filepath.Join(t.TempDir(), "config.toml"))
+
+	var out, errBuf bytes.Buffer
+	a := &app{out: &out, err: &errBuf}
+	root := newRootCmd("test", a)
+	root.SetArgs([]string{"alias", "--yes", "--dir", dir})
+	root.SetOut(&out)
+	root.SetErr(&errBuf)
+	if err := root.Execute(); err != nil {
+		t.Fatalf("alias failed: %v", err)
+	}
+	if !strings.Contains(out.String(), "leaving it alone") {
+		t.Errorf("an existing docker must not be replaced, got:\n%s", out.String())
+	}
+	content, err := os.ReadFile(realDocker)
+	if err != nil || !strings.Contains(string(content), "real docker") {
+		t.Errorf("the real docker was modified: %v %s", err, content)
+	}
+}
+
+// TestLoopGuard is the backstop for the same fork bomb: if anyctr is ever
+// executed as its own runtime despite detection, it must fail immediately.
+func TestLoopGuard(t *testing.T) {
+	t.Setenv(procexec.LoopGuardEnv, "1")
+	t.Setenv("ANYCTR_CONFIG", filepath.Join(t.TempDir(), "config.toml"))
+
+	var out, errBuf bytes.Buffer
+	a := &app{out: &out, err: &errBuf}
+	root := newRootCmd("test", a)
+	root.SetArgs([]string{"ps"})
+	root.SetOut(&out)
+	root.SetErr(&errBuf)
+
+	err := root.Execute()
+	if err == nil {
+		t.Fatal("anyctr running as its own runtime must fail, not recurse")
+	}
+	for _, want := range []string{"its own container runtime", "anyctr alias --remove"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error should contain %q, got:\n%v", want, err)
 		}
 	}
 }

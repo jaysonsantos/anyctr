@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -32,6 +33,10 @@ const cliErrorCode = 125
 // app carries the state every command needs: the resolved config and the global
 // switches that change how translation behaves.
 type app struct {
+	// name is how anyctr was invoked: "anyctr", or "docker" when it is running
+	// under the alias.
+	name string
+
 	configPath  string
 	runtimeName string
 	explain     bool
@@ -44,13 +49,43 @@ type app struct {
 
 // NewRootCmd builds the command tree. Version is injected at build time.
 func NewRootCmd(version string) *cobra.Command {
-	return newRootCmd(version, &app{out: os.Stdout, err: os.Stderr})
+	return newRootCmd(version, &app{
+		name: programName(os.Args[0]),
+		out:  os.Stdout,
+		err:  os.Stderr,
+	})
+}
+
+// programName is the command the engineer actually typed. Installed under the
+// alias, anyctr is invoked as `docker`, and cobra should print that in help and
+// usage rather than a name the engineer never used.
+func programName(argv0 string) string {
+	// Both separators are handled regardless of host OS: a Windows path should
+	// resolve the same way wherever this is reasoned about or tested.
+	name := argv0
+	if i := strings.LastIndexAny(name, `/\`); i >= 0 {
+		name = name[i+1:]
+	}
+	// docker.exe and docker.cmd are both just "docker" to the person typing.
+	switch ext := strings.ToLower(filepath.Ext(name)); ext {
+	case ".exe", ".cmd", ".bat":
+		name = name[:len(name)-len(ext)]
+	}
+	if name == "" || name == "." {
+		return "anyctr"
+	}
+	return name
 }
 
 // newRootCmd builds the tree around a given app, so tests can capture output.
 func newRootCmd(version string, a *app) *cobra.Command {
+	name := a.name
+	if name == "" {
+		name = "anyctr"
+	}
+
 	root := &cobra.Command{
-		Use:   "anyctr",
+		Use:   name,
 		Short: "One CLI for any container runtime",
 		Long: `anyctr is a gateway for container runtime CLIs.
 
@@ -84,6 +119,7 @@ flag has no faithful equivalent instead of silently changing what you asked for.
 		newTagCmd(a),
 		newComposeCmd(a),
 		newRawCmd(a),
+		newAliasCmd(a),
 		newRuntimeCmd(a),
 		newConfigCmd(a),
 		newVersionCmd(a),
@@ -109,8 +145,26 @@ func Execute(version string) int {
 	return cliErrorCode
 }
 
+// loopGuard stops anyctr from running as its own container runtime. Detection
+// normally rules that out, but a second anyctr binary or an exotic wrapper could
+// still close the loop, and a fork bomb is a far worse failure than an error.
+func loopGuard() error {
+	if os.Getenv(procexec.LoopGuardEnv) == "" {
+		return nil
+	}
+	return fmt.Errorf("anyctr was invoked as its own container runtime\n\n"+
+		"  The `%s` command on PATH is anyctr, so this would loop forever.\n\n"+
+		"  Remove the alias:\n"+
+		"    anyctr alias --remove\n\n"+
+		"  Or name the runtime explicitly:\n"+
+		"    anyctr --runtime=container ...", aliasName)
+}
+
 // load resolves configuration and environment defaults before any command runs.
 func (a *app) load(cmd *cobra.Command, _ []string) error {
+	if err := loopGuard(); err != nil {
+		return err
+	}
 	cfg, err := config.Load(a.configPath)
 	if err != nil {
 		return err

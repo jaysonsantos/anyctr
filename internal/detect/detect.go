@@ -14,7 +14,9 @@ package detect
 
 import (
 	"context"
+	"os"
 	"os/exec"
+	"path/filepath"
 	goruntime "runtime"
 	"strings"
 	"time"
@@ -114,9 +116,16 @@ func Probe(a runtime.Adapter, cfg *config.Config) Found {
 	candidates = append(candidates, a.Binary())
 	candidates = append(candidates, a.Aliases()...)
 
+	shadowed := false
 	for _, c := range candidates {
 		path, err := exec.LookPath(c)
 		if err != nil {
+			continue
+		}
+		// `anyctr alias` puts a `docker` on PATH that is anyctr itself. Selecting
+		// it would make anyctr exec itself forever, so it is never a runtime.
+		if IsSelf(path) {
+			shadowed = true
 			continue
 		}
 		f.Path = path
@@ -125,6 +134,9 @@ func Probe(a runtime.Adapter, cfg *config.Config) Found {
 		return f
 	}
 	f.Reason = "not found on PATH"
+	if shadowed {
+		f.Reason = "not installed (the " + a.Binary() + " on PATH is anyctr's own alias)"
+	}
 	return f
 }
 
@@ -200,6 +212,33 @@ func Select(cfg *config.Config, req Request) (runtime.Adapter, runtime.Info, err
 		searched = append(searched, a.Binary())
 	}
 	return nil, runtime.Info{}, &diag.NoRuntime{Searched: searched}
+}
+
+// IsSelf reports whether a binary on PATH is the running anyctr — directly, via
+// a symlink, or through the .cmd shim used on Windows.
+func IsSelf(path string) bool {
+	exe, err := os.Executable()
+	if err != nil {
+		return false
+	}
+	if SameFile(path, exe) {
+		return true
+	}
+	if goruntime.GOOS == "windows" {
+		content, err := os.ReadFile(path)
+		if err != nil {
+			return false
+		}
+		return strings.Contains(strings.ToLower(string(content)), strings.ToLower(exe))
+	}
+	return false
+}
+
+// SameFile reports whether two paths resolve to the same file.
+func SameFile(a, b string) bool {
+	ra, err1 := filepath.EvalSymlinks(a)
+	rb, err2 := filepath.EvalSymlinks(b)
+	return err1 == nil && err2 == nil && ra == rb
 }
 
 func priority(cfg *config.Config) []string {

@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	goruntime "runtime"
+	"strings"
 	"testing"
 
 	"github.com/pedrospdc/anyctr/internal/config"
@@ -132,5 +133,67 @@ func TestApplePlatformGate(t *testing.T) {
 	found := Probe(Lookup("container"), config.Default())
 	if goruntime.GOOS != "darwin" && found.Available {
 		t.Error("Apple's container must never be selected off macOS")
+	}
+}
+
+// TestAliasIsNeverSelectedAsARuntime is a regression test for a fork bomb.
+//
+// `anyctr alias` installs a `docker` command that is anyctr itself. Detection
+// prefers docker, so without this guard anyctr selected its own alias as the
+// runtime and executed itself until the process table filled up.
+func TestAliasIsNeverSelectedAsARuntime(t *testing.T) {
+	if goruntime.GOOS == "windows" {
+		t.Skip("symlink creation needs privileges on Windows")
+	}
+	self, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	if err := os.Symlink(self, filepath.Join(dir, "docker")); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir)
+
+	found := Probe(Lookup("docker"), config.Default())
+	if found.Available {
+		t.Fatalf("anyctr's own alias must never count as a runtime (path %q)", found.Path)
+	}
+	if !strings.Contains(found.Reason, "alias") {
+		t.Errorf("the reason should explain the alias, got %q", found.Reason)
+	}
+
+	// With only the alias on PATH, auto-detection must report no runtime rather
+	// than picking the thing that loops.
+	if _, _, err := Select(config.Default(), Request{}); err == nil {
+		t.Fatal("expected no runtime to be found")
+	}
+}
+
+// TestIsSelf covers the identity check behind that guard.
+func TestIsSelf(t *testing.T) {
+	if goruntime.GOOS == "windows" {
+		t.Skip("symlink creation needs privileges on Windows")
+	}
+	self, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !IsSelf(self) {
+		t.Error("the running binary is itself")
+	}
+	link := filepath.Join(t.TempDir(), "docker")
+	if err := os.Symlink(self, link); err != nil {
+		t.Fatal(err)
+	}
+	if !IsSelf(link) {
+		t.Error("a symlink to the running binary is itself")
+	}
+	other := filepath.Join(t.TempDir(), "docker")
+	if err := os.WriteFile(other, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if IsSelf(other) {
+		t.Error("an unrelated binary is not us")
 	}
 }
